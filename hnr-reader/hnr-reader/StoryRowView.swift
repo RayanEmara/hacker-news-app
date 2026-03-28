@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import LinkPresentation
 
 // MARK: - Story Row
 
@@ -23,34 +24,32 @@ struct StoryRowView: View {
 
                 Spacer(minLength: 4)
 
-                // Meta row
-                HStack(spacing: 6) {
+                // Meta rows
+                VStack(alignment: .leading, spacing: 6) {
                     Text(sourceLabel)
                         .fontWeight(.medium)
-                        .foregroundStyle(.primary)
 
-                    Text("·")
-                        .foregroundStyle(Color(uiColor: .quaternaryLabel))
+                    HStack(spacing: 6) {
+                        HStack(spacing: 3) {
+                            Image(systemName: "arrowtriangle.up")
+                                .imageScale(.small)
+                            Text(formattedScore)
+                        }
 
-                    HStack(spacing: 3) {
-                        Image(systemName: "arrowtriangle.up")
-                            .imageScale(.small)
-                        Text(formattedScore)
+                        Text("·")
+                            .foregroundStyle(Color(uiColor: .quaternaryLabel))
+
+                        HStack(spacing: 3) {
+                            Image(systemName: "bubble.right")
+                                .imageScale(.small)
+                            Text("\(story.commentsCount)")
+                        }
+
+                        Text("·")
+                            .foregroundStyle(Color(uiColor: .quaternaryLabel))
+
+                        Text(story.timeAgo)
                     }
-
-                    Text("·")
-                        .foregroundStyle(Color(uiColor: .quaternaryLabel))
-
-                    HStack(spacing: 3) {
-                        Image(systemName: "bubble.right")
-                            .imageScale(.small)
-                        Text("\(story.commentsCount)")
-                    }
-
-                    Text("·")
-                        .foregroundStyle(Color(uiColor: .quaternaryLabel))
-
-                    Text(story.timeAgo)
                 }
                 .font(.system(size: 12))
                 .foregroundStyle(Color(uiColor: .secondaryLabel))
@@ -83,18 +82,11 @@ struct StoryRowView: View {
 
 struct StoryThumbnail: View {
     let story: HNStory
+    @State private var previewImage: UIImage?
 
-    private enum Kind { case video, code, text, link }
-
-    private var kind: Kind {
-        guard let domain = story.domain else { return .text }
-        if domain.contains("youtube") || domain.contains("youtu.be") || domain.contains("vimeo") {
-            return .video
-        }
-        if domain.contains("github") || domain.contains("gitlab") {
-            return .code
-        }
-        return .link
+    // Only fetch OG image for link posts (has a URL, not a text post)
+    private var isLinkPost: Bool {
+        story.url != nil && !story.isAskHN && !story.isShowHN
     }
 
     private var tint: Color {
@@ -102,47 +94,132 @@ struct StoryThumbnail: View {
     }
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(backgroundColor)
-
-            icon
+        Group {
+            if let previewImage {
+                Image(uiImage: previewImage)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                fallback
+            }
         }
         .frame(width: 70, height: 70)
-    }
-
-    private var backgroundColor: Color {
-        switch kind {
-        case .video:  return Color(uiColor: .systemGray4)
-        case .code:   return Color(uiColor: .systemGray6)
-        case .text:   return Color(uiColor: .secondarySystemBackground)
-        case .link:   return tint.opacity(0.13)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .task(id: story.id) {
+            guard isLinkPost, let url = story.url else { return }
+            previewImage = await OGImageCache.shared.fetch(url: url)
         }
     }
 
     @ViewBuilder
-    private var icon: some View {
-        switch kind {
-        case .video:
-            Image(systemName: "play.fill")
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundStyle(Color(uiColor: .label))
-                .offset(x: 2)
+    private var fallback: some View {
+        ZStack {
+            fallbackBackground
+            fallbackIcon
+        }
+    }
 
-        case .code:
-            Image(systemName: "chevron.left.forwardslash.chevron.right")
-                .font(.system(size: 18, weight: .medium))
-                .foregroundStyle(Color(uiColor: .label))
+    private var fallbackBackground: Color {
+        guard let domain = story.domain else {
+            return Color(uiColor: .secondarySystemBackground)
+        }
+        if domain.contains("youtube") || domain.contains("youtu.be") || domain.contains("vimeo") {
+            return Color(uiColor: .systemGray4)
+        }
+        if domain.contains("github") || domain.contains("gitlab") {
+            return Color(uiColor: .systemGray6)
+        }
+        if story.isAskHN || story.isShowHN || story.url == nil {
+            return Color(uiColor: .secondarySystemBackground)
+        }
+        return tint.opacity(0.13)
+    }
 
-        case .text:
+    @ViewBuilder
+    private var fallbackIcon: some View {
+        if let domain = story.domain {
+            if domain.contains("youtube") || domain.contains("youtu.be") || domain.contains("vimeo") {
+                Image(systemName: "play.fill")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(Color(uiColor: .label))
+                    .offset(x: 2)
+            } else if domain.contains("github") || domain.contains("gitlab") {
+                Image(systemName: "chevron.left.forwardslash.chevron.right")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(Color(uiColor: .label))
+            } else if story.isAskHN || story.isShowHN || story.url == nil {
+                Image(systemName: "text.alignleft")
+                    .font(.system(size: 22))
+                    .foregroundStyle(Color(uiColor: .tertiaryLabel))
+            } else {
+                Text(String(domain.prefix(1)).uppercased())
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .foregroundStyle(tint)
+            }
+        } else {
             Image(systemName: "text.alignleft")
                 .font(.system(size: 22))
                 .foregroundStyle(Color(uiColor: .tertiaryLabel))
+        }
+    }
+}
 
-        case .link:
-            Text(String((story.domain ?? story.title).prefix(1)).uppercased())
-                .font(.system(size: 28, weight: .bold, design: .rounded))
-                .foregroundStyle(tint)
+// MARK: - OG Image Cache
+
+@MainActor
+final class OGImageCache {
+    static let shared = OGImageCache()
+    private var cached: [String: UIImage] = [:]
+    private var failed: Set<String> = []
+    private var inFlight: [String: Task<UIImage?, Never>] = [:]
+
+    func fetch(url: String) async -> UIImage? {
+        if let hit = cached[url] { return hit }
+        if failed.contains(url) { return nil }
+
+        // Reuse an in-flight task for the same URL rather than making a duplicate request
+        if let existing = inFlight[url] {
+            return await existing.value
+        }
+
+        let task = Task { @MainActor in
+            await Self.fetchViaLinkPresentation(url: url)
+        }
+        inFlight[url] = task
+        let result = await task.value
+        inFlight.removeValue(forKey: url)
+
+        if let result {
+            cached[url] = result
+        } else {
+            failed.insert(url)
+        }
+        return result
+    }
+
+    private static func fetchViaLinkPresentation(url: String) async -> UIImage? {
+        guard let parsedURL = URL(string: url) else { return nil }
+        let provider = LPMetadataProvider()
+        provider.timeout = 10
+        guard let metadata = try? await provider.startFetchingMetadata(for: parsedURL),
+              let imageProvider = metadata.imageProvider,
+              let image = try? await imageProvider.loadUIImage()
+        else { return nil }
+        return image
+    }
+}
+
+private extension NSItemProvider {
+    func loadUIImage() async throws -> UIImage? {
+        guard canLoadObject(ofClass: UIImage.self) else { return nil }
+        return try await withCheckedThrowingContinuation { continuation in
+            _ = loadObject(ofClass: UIImage.self) { object, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume(returning: object as? UIImage)
+                }
+            }
         }
     }
 }
