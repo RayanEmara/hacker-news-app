@@ -34,8 +34,8 @@ struct SearchView: View {
                         .listRowSeparator(.hidden)
                         .listRowInsets(EdgeInsets(top: 48, leading: 16, bottom: 0, trailing: 16))
                 } else {
-                    ForEach(Array(results.enumerated()), id: \.element.id) { index, story in
-                        StoryRowView(story: story, rank: index + 1)
+                    ForEach(results) { story in
+                        StoryRowView(story: story)
                             .listRowInsets(EdgeInsets())
                             .listRowSeparatorTint(Color(uiColor: .separator))
                     }
