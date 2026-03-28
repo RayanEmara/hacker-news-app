@@ -28,18 +28,30 @@ struct StoriesView: View {
                 } else {
                     List {
                         ForEach(store.stories) { story in
-                            Button { selectedStory = story } label: {
-                                StoryRowView(story: story)
-                            }
-                            .buttonStyle(.plain)
-                            .listRowInsets(EdgeInsets())
-                            .listRowSeparatorTint(Color(uiColor: .separator))
-                            .listRowSeparator(.hidden, edges: .top)
-                            .onAppear {
-                                if story.id == store.stories.last?.id {
-                                    Task { await store.loadMore() }
+                            StoryRowView(story: story, isRead: ReadHistory.shared.isRead(story.id))
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    ReadHistory.shared.markRead(story.id)
+                                    selectedStory = story
                                 }
-                            }
+                                .overlay(alignment: .trailing) {
+                                    if let urlString = story.url, let url = URL(string: urlString) {
+                                        Link(destination: url) {
+                                            Color.clear
+                                                .frame(width: 70, height: 70)
+                                        }
+                                        .padding(.trailing, 16)
+                                        .padding(.top, 13)
+                                    }
+                                }
+                                .listRowInsets(EdgeInsets())
+                                .listRowSeparatorTint(Color(uiColor: .separator))
+                                .listRowSeparator(.hidden, edges: .top)
+                                .onAppear {
+                                    if story.id == store.stories.last?.id {
+                                        Task { await store.loadMore() }
+                                    }
+                                }
                         }
                     }
                     .listStyle(.plain)

@@ -25,6 +25,7 @@ struct hnr_readerApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .openLinksInApp()
         }
     }
 }

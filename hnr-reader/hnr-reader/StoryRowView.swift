@@ -10,6 +10,7 @@ import LinkPresentation
 
 struct StoryRowView: View {
     let story: HNStory
+    var isRead: Bool = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -18,7 +19,7 @@ struct StoryRowView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(story.title)
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(isRead ? .secondary : .primary)
                     .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
 

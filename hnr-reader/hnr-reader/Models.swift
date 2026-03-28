@@ -97,7 +97,7 @@ struct HNStory: Identifiable, Hashable {
 struct HNComment: Identifiable {
     let id: Int
     let author: String
-    let body: String
+    let body: AttributedString
     let timeAgo: String
     let depth: Int
 
@@ -106,7 +106,7 @@ struct HNComment: Identifiable {
         return HNComment(
             id: child.id,
             author: author,
-            body: stripHTML(text),
+            body: parseHTML(text),
             timeAgo: child.createdAtI.map { relativeTime(from: $0) } ?? "",
             depth: depth
         )
@@ -123,22 +123,108 @@ struct HNComment: Identifiable {
         return "\(days)d ago"
     }
 
-    private static func stripHTML(_ html: String) -> String {
-        var result = html
-        result = result.replacingOccurrences(of: "<p>", with: "\n\n")
-        result = result.replacingOccurrences(of: "<br>", with: "\n")
-        result = result.replacingOccurrences(of: "<br/>", with: "\n")
-        if let regex = try? NSRegularExpression(pattern: "<[^>]+>") {
-            result = regex.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "")
-        }
-        result = result
-            .replacingOccurrences(of: "&amp;", with: "&")
+    static func decodeEntities(_ text: String) -> String {
+        text.replacingOccurrences(of: "&amp;", with: "&")
             .replacingOccurrences(of: "&lt;", with: "<")
             .replacingOccurrences(of: "&gt;", with: ">")
             .replacingOccurrences(of: "&quot;", with: "\"")
             .replacingOccurrences(of: "&#x27;", with: "'")
             .replacingOccurrences(of: "&#x2F;", with: "/")
+            .replacingOccurrences(of: "&#39;", with: "'")
+            .replacingOccurrences(of: "&#47;", with: "/")
             .replacingOccurrences(of: "&nbsp;", with: " ")
-        return result.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private enum InlineTag {
+        case link(url: String, text: String)
+        case italic(text: String)
+    }
+
+    static func parseHTML(_ html: String) -> AttributedString {
+        var processed = html
+        var tags: [(range: NSRange, tag: InlineTag)] = []
+
+        // Extract <a> tags
+        if let linkPattern = try? NSRegularExpression(pattern: #"<a\s+[^>]*href\s*=\s*"([^"]*)"[^>]*>(.*?)</a>"#, options: .caseInsensitive) {
+            let ns = processed as NSString
+            for match in linkPattern.matches(in: processed, range: NSRange(location: 0, length: ns.length)) {
+                let url = decodeEntities(ns.substring(with: match.range(at: 1)))
+                let text = decodeEntities(ns.substring(with: match.range(at: 2)))
+                tags.append((match.range, .link(url: url, text: text)))
+            }
+        }
+
+        // Extract <i> / <em> tags
+        if let italicPattern = try? NSRegularExpression(pattern: #"<(i|em)>(.*?)</\1>"#, options: .caseInsensitive) {
+            let ns = processed as NSString
+            for match in italicPattern.matches(in: processed, range: NSRange(location: 0, length: ns.length)) {
+                let range = match.range
+                // Skip if this range overlaps with an already-extracted tag (e.g. italic inside a link)
+                if tags.contains(where: { NSIntersectionRange($0.range, range).length > 0 }) { continue }
+                let text = ns.substring(with: match.range(at: 2))
+                tags.append((range, .italic(text: text)))
+            }
+        }
+
+        // Sort by position descending so we can replace without shifting indices
+        tags.sort { $0.range.location > $1.range.location }
+
+        // Replace tags with indexed placeholders
+        for (i, tag) in tags.enumerated() {
+            let startIndex = processed.index(processed.startIndex, offsetBy: tag.range.location)
+            let endIndex = processed.index(startIndex, offsetBy: tag.range.length)
+            processed.replaceSubrange(startIndex..<endIndex, with: "⟦TAG\(i)⟧")
+        }
+
+        // Reverse so tags are in document order for building the attributed string
+        tags.reverse()
+
+        // Convert block-level HTML to newlines
+        processed = processed.replacingOccurrences(of: "<p>", with: "\n\n")
+        processed = processed.replacingOccurrences(of: "<br>", with: "\n")
+        processed = processed.replacingOccurrences(of: "<br/>", with: "\n")
+
+        // Strip remaining HTML tags
+        if let tagRegex = try? NSRegularExpression(pattern: "<[^>]+>") {
+            processed = tagRegex.stringByReplacingMatches(in: processed, range: NSRange(location: 0, length: (processed as NSString).length), withTemplate: "")
+        }
+
+        processed = decodeEntities(processed)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Build AttributedString, replacing placeholders with styled runs
+        var result = AttributedString()
+        var remaining = processed
+
+        for (i, tag) in tags.enumerated() {
+            let placeholder = "⟦TAG\(i)⟧"
+            guard let placeholderRange = remaining.range(of: placeholder) else { continue }
+
+            let before = String(remaining[remaining.startIndex..<placeholderRange.lowerBound])
+            if !before.isEmpty {
+                result.append(AttributedString(before))
+            }
+
+            switch tag.tag {
+            case .link(let url, let text):
+                var linkStr = AttributedString(decodeEntities(text))
+                if let parsedURL = URL(string: url) {
+                    linkStr.link = parsedURL
+                }
+                result.append(linkStr)
+            case .italic(let text):
+                var italicStr = AttributedString(decodeEntities(text))
+                italicStr.inlinePresentationIntent = .emphasized
+                result.append(italicStr)
+            }
+
+            remaining = String(remaining[placeholderRange.upperBound...])
+        }
+
+        if !remaining.isEmpty {
+            result.append(AttributedString(remaining))
+        }
+
+        return result
     }
 }

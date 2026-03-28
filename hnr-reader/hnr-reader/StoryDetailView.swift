@@ -11,6 +11,27 @@ struct StoryDetailView: View {
     @State private var previewImage: UIImage?
     @State private var comments: [HNComment] = []
     @State private var isLoadingComments = true
+    @State private var collapsedIDs: Set<Int> = []
+
+    /// Returns comments with collapsed children filtered out.
+    private var visibleComments: [HNComment] {
+        var result: [HNComment] = []
+        var skipDepthAbove: Int? = nil
+        for comment in comments {
+            if let threshold = skipDepthAbove {
+                if comment.depth > threshold {
+                    continue // child of a collapsed comment
+                } else {
+                    skipDepthAbove = nil
+                }
+            }
+            result.append(comment)
+            if collapsedIDs.contains(comment.id) {
+                skipDepthAbove = comment.depth
+            }
+        }
+        return result
+    }
 
     private var navTitle: String {
         if story.isAskHN { return "Ask HN" }
@@ -26,25 +47,55 @@ struct StoryDetailView: View {
 
                 // MARK: Hero image
                 if let img = previewImage {
-                    Color.clear
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 220)
-                        .overlay {
-                            Image(uiImage: img)
-                                .resizable()
-                                .scaledToFill()
+                    Group {
+                        if let urlString = story.url, let url = URL(string: urlString) {
+                            Link(destination: url) {
+                                Color.clear
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 220)
+                                    .overlay {
+                                        Image(uiImage: img)
+                                            .resizable()
+                                            .scaledToFill()
+                                    }
+                                    .clipped()
+                            }
+                        } else {
+                            Color.clear
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 220)
+                                .overlay {
+                                    Image(uiImage: img)
+                                        .resizable()
+                                        .scaledToFill()
+                                }
+                                .clipped()
                         }
-                        .clipped()
+                    }
                 }
 
-                // MARK: Title + metadata
+                // MARK: Title + body + metadata
                 VStack(alignment: .leading, spacing: 10) {
                     Text(story.title)
                         .font(.title2.weight(.bold))
 
+                    if let bodyText = story.bodyText, !bodyText.isEmpty {
+                        Text(HNComment.parseHTML(bodyText))
+                            .font(.system(size: 15))
+                            .foregroundStyle(Color(uiColor: .label))
+                            .tint(Color(red: 0.4, green: 0.6, blue: 1.0))
+                    }
+
                     HStack(spacing: 4) {
-                        Text(story.domain ?? "news.ycombinator.com")
-                            .foregroundStyle(Color.orange)
+                        if let urlString = story.url, let url = URL(string: urlString) {
+                            Link(destination: url) {
+                                Text(story.domain ?? "news.ycombinator.com")
+                                    .foregroundStyle(Color.orange)
+                            }
+                        } else {
+                            Text(story.domain ?? "news.ycombinator.com")
+                                .foregroundStyle(Color.orange)
+                        }
                         Text("by \(story.author)")
                             .foregroundStyle(Color(uiColor: .secondaryLabel))
                     }
@@ -86,17 +137,6 @@ struct StoryDetailView: View {
 
                 Divider()
 
-                // MARK: Body text (Ask HN / Show HN)
-                if let body = story.bodyText, !body.isEmpty {
-                    Text(body)
-                        .font(.system(size: 15))
-                        .foregroundStyle(Color(uiColor: .label))
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 14)
-
-                    Divider()
-                }
-
                 // MARK: Comments
                 if isLoadingComments {
                     ProgressView()
@@ -109,8 +149,21 @@ struct StoryDetailView: View {
                         .multilineTextAlignment(.center)
                 } else {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(comments) { comment in
-                            CommentRowView(comment: comment, opAuthor: story.author)
+                        ForEach(visibleComments) { comment in
+                            CommentRowView(
+                                comment: comment,
+                                opAuthor: story.author,
+                                isCollapsed: collapsedIDs.contains(comment.id),
+                                onToggleCollapse: {
+                                    withAnimation(.easeInOut(duration: 0.25)) {
+                                        if collapsedIDs.contains(comment.id) {
+                                            collapsedIDs.remove(comment.id)
+                                        } else {
+                                            collapsedIDs.insert(comment.id)
+                                        }
+                                    }
+                                }
+                            )
                             Divider()
                                 .padding(.leading, 16 + CGFloat(min(comment.depth, 4)) * 12)
                         }
@@ -155,6 +208,8 @@ struct StoryDetailView: View {
 struct CommentRowView: View {
     let comment: HNComment
     let opAuthor: String
+    var isCollapsed: Bool = false
+    var onToggleCollapse: (() -> Void)? = nil
 
     private var isOP: Bool { comment.author == opAuthor }
     private var depth: Int { min(comment.depth, 4) }
@@ -162,11 +217,17 @@ struct CommentRowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            // Header — tapping this collapses/expands
             HStack(alignment: .center, spacing: 4) {
                 Text(isOP ? "(OP) \(comment.author)" : comment.author)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(isOP ? Color.accentColor : Color(uiColor: .label))
+                    .foregroundStyle(isOP ? Color.accentColor.opacity(isCollapsed ? 0.5 : 1.0) : Color(uiColor: isCollapsed ? .tertiaryLabel : .label))
                     .lineLimit(1)
+
+                Image(systemName: "chevron.forward")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Color(uiColor: .tertiaryLabel))
+                    .rotationEffect(.degrees(isCollapsed ? 0 : 90))
 
                 Spacer(minLength: 8)
 
@@ -175,10 +236,16 @@ struct CommentRowView: View {
                     .foregroundStyle(Color(uiColor: .tertiaryLabel))
                     .layoutPriority(1)
             }
+            .contentShape(Rectangle())
+            .onTapGesture { onToggleCollapse?() }
 
-            Text(comment.body)
-                .font(.system(size: 15))
-                .foregroundStyle(Color(uiColor: .label))
+            // Body — links are tappable, not intercepted by collapse gesture
+            if !isCollapsed {
+                Text(comment.body)
+                    .font(.system(size: 15))
+                    .foregroundStyle(Color(uiColor: .label))
+                    .tint(Color(red: 0.4, green: 0.6, blue: 1.0))
+            }
         }
         .padding(.leading, leadingPad)
         .padding(.trailing, 16)

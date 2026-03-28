@@ -47,7 +47,7 @@ struct SearchView: View {
             .navigationDestination(item: $selectedStory) { story in
                 StoryDetailView(story: story)
             }
-            .searchable(text: $query, placement: .toolbar)
+            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always))
             .task(id: query) {
                 guard !query.isEmpty else {
                     results = []
@@ -75,31 +75,17 @@ struct SearchView: View {
 // MARK: - Empty State
 
 struct SearchEmptyState: View {
-    private let suggestions = ["SwiftUI", "LLM inference", "Rust async", "PostgreSQL", "open source"]
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("Suggested")
-                .font(.system(size: 12, weight: .semibold))
+        VStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 34))
                 .foregroundStyle(Color(uiColor: .tertiaryLabel))
 
-            ForEach(suggestions, id: \.self) { term in
-                HStack(spacing: 12) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 13))
-                        .foregroundStyle(Color(uiColor: .tertiaryLabel))
-                    Text(term)
-                        .font(.system(size: 15))
-                        .foregroundStyle(.primary)
-                    Spacer()
-                }
-                .padding(.vertical, 2)
-
-                Divider()
-            }
+            Text("Search Hacker News")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(Color(uiColor: .secondaryLabel))
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, 8)
+        .frame(maxWidth: .infinity)
     }
 }
 
