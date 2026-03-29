@@ -15,7 +15,6 @@ struct SafariView: UIViewControllerRepresentable {
         config.entersReaderIfAvailable = readerMode
         config.barCollapsingEnabled = false
         let vc = SFSafariViewController(url: url, configuration: config)
-        vc.preferredControlTintColor = .orange
         return vc
     }
 
@@ -27,6 +26,7 @@ struct SafariView: UIViewControllerRepresentable {
 struct InAppBrowserModifier: ViewModifier {
     @AppStorage("useInAppBrowser") private var useInAppBrowser = true
     @AppStorage("useReaderMode") private var useReaderMode = true
+    @AppStorage("readerModeExceptionDomains") private var readerModeExceptionDomainsRaw = ""
     @State private var safariURL: URL?
 
     func body(content: Content) -> some View {
@@ -39,9 +39,21 @@ struct InAppBrowserModifier: ViewModifier {
                 return .systemAction
             })
             .fullScreenCover(item: $safariURL) { url in
-                SafariView(url: url, readerMode: useReaderMode)
+                SafariView(url: url, readerMode: shouldUseReaderMode(for: url))
                     .ignoresSafeArea()
             }
+    }
+
+    private func shouldUseReaderMode(for url: URL) -> Bool {
+        let hasOverride = readerModeExceptionDomains.contains { $0.matches(host: url.host) }
+        return hasOverride ? !useReaderMode : useReaderMode
+    }
+
+    private var readerModeExceptionDomains: [String] {
+        readerModeExceptionDomainsRaw
+            .split(separator: "\n")
+            .map { String($0) }
+            .filter { !$0.isEmpty }
     }
 }
 
@@ -52,5 +64,33 @@ extension URL: @retroactive Identifiable {
 extension View {
     func openLinksInApp() -> some View {
         modifier(InAppBrowserModifier())
+    }
+}
+
+func normalizeDomain(_ value: String) -> String? {
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard !trimmed.isEmpty else { return nil }
+
+    let hostCandidate: String
+    if let url = URL(string: trimmed), let host = url.host {
+        hostCandidate = host
+    } else if let url = URL(string: "https://\(trimmed)"), let host = url.host {
+        hostCandidate = host
+    } else {
+        hostCandidate = trimmed
+    }
+
+    let sanitized = hostCandidate
+        .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        .replacingOccurrences(of: "^www\\.", with: "", options: .regularExpression)
+
+    return sanitized.isEmpty ? nil : sanitized
+}
+
+private extension String {
+    func matches(host: String?) -> Bool {
+        guard let normalizedSelf = normalizeDomain(self),
+              let normalizedHost = host.flatMap(normalizeDomain) else { return false }
+        return normalizedHost == normalizedSelf || normalizedHost.hasSuffix(".\(normalizedSelf)")
     }
 }

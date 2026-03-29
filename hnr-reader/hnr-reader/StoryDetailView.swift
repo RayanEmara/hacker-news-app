@@ -33,11 +33,7 @@ struct StoryDetailView: View {
         return result
     }
 
-    private var navTitle: String {
-        if story.isAskHN { return "Ask HN" }
-        if story.isShowHN { return "Show HN" }
-        return story.domain ?? "Hacker News"
-    }
+    private var allowsTopHeroBleed: Bool { previewImage != nil }
 
     var body: some View {
         ScrollView {
@@ -59,17 +55,17 @@ struct StoryDetailView: View {
                             ZStack(alignment: .bottom) {
                                 LinearGradient(
                                     stops: [
-                                        .init(color: .clear, location: 0),
-                                        .init(color: Color(.systemBackground), location: 1)
+                                        .init(color: Color(.systemBackground).opacity(0),    location: 0),
+                                        .init(color: Color(.systemBackground).opacity(0.35), location: 0.3),
+                                        .init(color: Color(.systemBackground).opacity(0.45), location: 0.6),
+                                        .init(color: Color(.systemBackground).opacity(0.65), location: 0.7),
+                                        .init(color: Color(.systemBackground).opacity(0.92), location: 0.9),
+                                        .init(color: Color(.systemBackground),               location: 0.96)
                                     ],
                                     startPoint: .top,
                                     endPoint: .bottom
                                 )
-                                Text(story.title)
-                                    .font(.title2.weight(.bold))
-                                    .foregroundStyle(Color.primary)
-                                    .multilineTextAlignment(.leading)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                titleView(foregroundStyle: .primary)
                                     .padding(.horizontal, 16)
                                     .padding(.bottom, 14)
                             }
@@ -88,8 +84,7 @@ struct StoryDetailView: View {
                 // MARK: Title + body + metadata
                 VStack(alignment: .leading, spacing: 10) {
                     if previewImage == nil {
-                        Text(story.title)
-                            .font(.title2.weight(.bold))
+                        titleView(foregroundStyle: .primary)
                     }
 
                     if let bodyText = story.bodyText, !bodyText.isEmpty {
@@ -161,7 +156,7 @@ struct StoryDetailView: View {
                         .frame(maxWidth: .infinity, minHeight: 80)
                         .multilineTextAlignment(.center)
                 } else {
-                    LazyVStack(alignment: .leading, spacing: 0) {
+                    LazyVStack(alignment: .leading, spacing: 4) {
                         ForEach(visibleComments) { comment in
                             CommentRowView(
                                 comment: comment,
@@ -177,8 +172,6 @@ struct StoryDetailView: View {
                                     }
                                 }
                             )
-                            Divider()
-                                .padding(.leading, 16 + CGFloat(min(comment.depth, 4)) * 12)
                         }
                     }
                 }
@@ -186,11 +179,11 @@ struct StoryDetailView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .ignoresSafeArea(edges: .top)
-        .navigationTitle(navTitle)
+        .ignoresSafeArea(edges: allowsTopHeroBleed ? .top : [])
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(.hidden, for: .navigationBar)
-        .task {
+        .toolbarBackground(allowsTopHeroBleed ? .hidden : .visible, for: .navigationBar)
+        .task(id: story.id) {
             async let imageTask: Void = loadImage()
             async let commentsTask: Void = loadComments()
             _ = await (imageTask, commentsTask)
@@ -198,11 +191,33 @@ struct StoryDetailView: View {
     }
 
     private func loadImage() async {
+        previewImage = nil
         guard let url = story.url else { return }
         previewImage = await OGImageCache.shared.fetch(url: url)
     }
 
+    @ViewBuilder
+    private func titleView(foregroundStyle: Color) -> some View {
+        let titleContent = Text(
+            "\(Text(story.title).font(.title2.weight(.bold)))\(story.url != nil ? Text(" \(Image(systemName: "arrow.up.right"))").font(.footnote.weight(.semibold)) : Text(""))"
+        )
+        .foregroundStyle(foregroundStyle)
+        .multilineTextAlignment(.leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
+
+        if let urlString = story.url, let url = URL(string: urlString) {
+            Link(destination: url) {
+                titleContent
+            }
+        } else {
+            titleContent
+        }
+    }
+
     private func loadComments() async {
+        comments = []
+        collapsedIDs.removeAll()
+        isLoadingComments = true
         do {
             comments = try await HNService.fetchComments(storyID: story.id)
         } catch {}
@@ -225,10 +240,21 @@ struct CommentRowView: View {
     let opAuthor: String
     var isCollapsed: Bool = false
     var onToggleCollapse: (() -> Void)? = nil
+    @Environment(\.colorScheme) private var colorScheme
 
     private var isOP: Bool { comment.author == opAuthor }
     private var depth: Int { min(comment.depth, 4) }
     private var leadingPad: CGFloat { 16 + CGFloat(depth) * 12 }
+    private var guideLeadingPad: CGFloat { depth > 0 ? 16 + CGFloat(depth - 1) * 12 + 5 : 0 }
+    private let tintCornerRadius: CGFloat = 14
+    private var backgroundTint: Color {
+        guard depth > 0, depth % 2 == 1 else { return .clear }
+        return Color(uiColor: .quaternarySystemFill).opacity(0.25)
+    }
+    private var guideTint: Color { pastelCommentColor(for: comment.author) }
+    private var authorTint: Color {
+        colorScheme == .light ? guideTint.mix(with: .black, amount: 0.38) : guideTint
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -236,7 +262,7 @@ struct CommentRowView: View {
             HStack(alignment: .center, spacing: 4) {
                 Text(isOP ? "(OP) \(comment.author)" : comment.author)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(isOP ? Color.accentColor.opacity(isCollapsed ? 0.5 : 1.0) : Color(uiColor: isCollapsed ? .tertiaryLabel : .label))
+                    .foregroundStyle(isCollapsed ? authorTint.opacity(0.55) : authorTint)
                     .lineLimit(1)
 
                 Image(systemName: "chevron.forward")
@@ -264,16 +290,81 @@ struct CommentRowView: View {
         }
         .padding(.leading, leadingPad)
         .padding(.trailing, 16)
-        .padding(.vertical, 12)
+        .padding(.vertical, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(alignment: .leading) {
-            if depth > 0 {
-                Rectangle()
-                    .fill(Color(uiColor: .separator))
-                    .frame(width: 1.5)
-                    .padding(.leading, 16 + CGFloat(depth - 1) * 12 + 5)
-                    .padding(.vertical, 4)
+        .background {
+            HStack(spacing: 0) {
+                Color.clear
+                    .frame(width: guideLeadingPad)
+                RoundedRectangle(cornerRadius: tintCornerRadius, style: .continuous)
+                    .fill(backgroundTint)
             }
         }
+        .overlay(alignment: .leading) {
+            if depth > 0 {
+                HStack(spacing: 0) {
+                    Color.clear
+                        .frame(width: guideLeadingPad)
+                    Rectangle()
+                        .fill(guideTint.opacity(colorScheme == .light ? 0.95 : 0.9))
+                        .frame(width: 1.5)
+                    Spacer(minLength: 0)
+                }
+                .padding(.vertical, 4)
+                .mask {
+                    HStack(spacing: 0) {
+                        Color.clear
+                            .frame(width: guideLeadingPad)
+                        RoundedRectangle(cornerRadius: tintCornerRadius, style: .continuous)
+                    }
+                }
+            }
+        }
+    }
+}
+
+func pastelCommentColor(for author: String) -> Color {
+    let palette: [Color] = [
+        Color(red: 0.67, green: 0.76, blue: 0.86),
+        Color(red: 0.63, green: 0.80, blue: 0.74),
+        Color(red: 0.78, green: 0.72, blue: 0.88),
+        Color(red: 0.87, green: 0.73, blue: 0.67),
+        Color(red: 0.78, green: 0.80, blue: 0.64),
+        Color(red: 0.68, green: 0.73, blue: 0.84),
+        Color(red: 0.82, green: 0.69, blue: 0.78),
+        Color(red: 0.69, green: 0.81, blue: 0.83),
+        Color(red: 0.84, green: 0.77, blue: 0.66),
+        Color(red: 0.74, green: 0.74, blue: 0.85)
+    ]
+    let hash = author.unicodeScalars.reduce(0) { ($0 &* 31) &+ Int($1.value) }
+    return palette[abs(hash) % palette.count]
+}
+
+private extension Color {
+    func mix(with other: Color, amount: Double) -> Color {
+        let t = max(0, min(amount, 1))
+        let lhs = UIColor(self)
+        let rhs = UIColor(other)
+
+        var lr: CGFloat = 0
+        var lg: CGFloat = 0
+        var lb: CGFloat = 0
+        var la: CGFloat = 0
+        var rr: CGFloat = 0
+        var rg: CGFloat = 0
+        var rb: CGFloat = 0
+        var ra: CGFloat = 0
+
+        guard lhs.getRed(&lr, green: &lg, blue: &lb, alpha: &la),
+              rhs.getRed(&rr, green: &rg, blue: &rb, alpha: &ra) else {
+            return self
+        }
+
+        return Color(
+            red: lr + (rr - lr) * t,
+            green: lg + (rg - lg) * t,
+            blue: lb + (rb - lb) * t,
+            opacity: la + (ra - la) * t
+        )
     }
 }

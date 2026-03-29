@@ -31,4 +31,9 @@ final class ReadHistory {
     func isRead(_ id: Int) -> Bool {
         readIDs.contains(id)
     }
+
+    func clear() {
+        readIDs.removeAll()
+        UserDefaults.standard.removeObject(forKey: key)
+    }
 }
