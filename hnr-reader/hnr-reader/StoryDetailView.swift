@@ -47,37 +47,50 @@ struct StoryDetailView: View {
 
                 // MARK: Hero image
                 if let img = previewImage {
+                    let heroContent = Color.clear
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 360)
+                        .overlay {
+                            Image(uiImage: img)
+                                .resizable()
+                                .scaledToFill()
+                        }
+                        .overlay(alignment: .bottom) {
+                            ZStack(alignment: .bottom) {
+                                LinearGradient(
+                                    stops: [
+                                        .init(color: .clear, location: 0),
+                                        .init(color: Color(.systemBackground), location: 1)
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                                Text(story.title)
+                                    .font(.title2.weight(.bold))
+                                    .foregroundStyle(Color.primary)
+                                    .multilineTextAlignment(.leading)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, 16)
+                                    .padding(.bottom, 14)
+                            }
+                        }
+                        .clipped()
+
                     Group {
                         if let urlString = story.url, let url = URL(string: urlString) {
-                            Link(destination: url) {
-                                Color.clear
-                                    .frame(maxWidth: .infinity)
-                                    .frame(height: 220)
-                                    .overlay {
-                                        Image(uiImage: img)
-                                            .resizable()
-                                            .scaledToFill()
-                                    }
-                                    .clipped()
-                            }
+                            Link(destination: url) { heroContent }
                         } else {
-                            Color.clear
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 220)
-                                .overlay {
-                                    Image(uiImage: img)
-                                        .resizable()
-                                        .scaledToFill()
-                                }
-                                .clipped()
+                            heroContent
                         }
                     }
                 }
 
                 // MARK: Title + body + metadata
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(story.title)
-                        .font(.title2.weight(.bold))
+                    if previewImage == nil {
+                        Text(story.title)
+                            .font(.title2.weight(.bold))
+                    }
 
                     if let bodyText = story.bodyText, !bodyText.isEmpty {
                         Text(HNComment.parseHTML(bodyText))
@@ -173,8 +186,10 @@ struct StoryDetailView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .ignoresSafeArea(edges: .top)
         .navigationTitle(navTitle)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
         .task {
             async let imageTask: Void = loadImage()
             async let commentsTask: Void = loadComments()
