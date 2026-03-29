@@ -5,6 +5,7 @@
 
 import SafariServices
 import SwiftUI
+import WebKit
 
 struct SafariView: UIViewControllerRepresentable {
     let url: URL
@@ -21,6 +22,21 @@ struct SafariView: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
 }
 
+// MARK: - Inline WebView for iPad detail pane
+
+struct InlineWebView: UIViewRepresentable {
+    let url: URL
+
+    func makeUIView(context: Context) -> WKWebView {
+        let webView = WKWebView()
+        webView.allowsBackForwardNavigationGestures = true
+        webView.load(URLRequest(url: url))
+        return webView
+    }
+
+    func updateUIView(_ webView: WKWebView, context: Context) {}
+}
+
 // MARK: - View modifier that intercepts all link opens
 
 struct InAppBrowserModifier: ViewModifier {
@@ -28,6 +44,8 @@ struct InAppBrowserModifier: ViewModifier {
     @AppStorage("useReaderMode") private var useReaderMode = true
     @AppStorage("readerModeExceptionDomains") private var readerModeExceptionDomainsRaw = ""
     @State private var safariURL: URL?
+
+    private var isIPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
 
     func body(content: Content) -> some View {
         content
@@ -45,6 +63,7 @@ struct InAppBrowserModifier: ViewModifier {
     }
 
     private func shouldUseReaderMode(for url: URL) -> Bool {
+        guard !isIPad else { return false }
         let hasOverride = readerModeExceptionDomains.contains { $0.matches(host: url.host) }
         return hasOverride ? !useReaderMode : useReaderMode
     }

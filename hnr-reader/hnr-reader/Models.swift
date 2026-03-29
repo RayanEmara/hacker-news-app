@@ -11,6 +11,24 @@ enum StoryFeed: String, CaseIterable {
     case ask = "Ask posts"
     case show = "Show posts"
 
+    var storageValue: String {
+        switch self {
+        case .top: "top"
+        case .new: "new"
+        case .ask: "ask"
+        case .show: "show"
+        }
+    }
+
+    var shortTitle: String {
+        switch self {
+        case .top: "Top"
+        case .new: "New"
+        case .ask: "Ask"
+        case .show: "Show"
+        }
+    }
+
     var iconName: String {
         switch self {
         case .top: "flame.fill"
@@ -18,6 +36,10 @@ enum StoryFeed: String, CaseIterable {
         case .ask: "bubble.left.fill"
         case .show: "eye.fill"
         }
+    }
+
+    static func fromStorageValue(_ value: String) -> StoryFeed {
+        Self.allCases.first(where: { $0.storageValue == value }) ?? .top
     }
 }
 
@@ -178,11 +200,9 @@ struct HNComment: Identifiable {
         // Sort by position ascending (document order) — replace from end to start to preserve indices
         tags.sort { $0.range.location < $1.range.location }
 
-        for i in stride(from: tags.count - 1, through: 0, by: -1) {
-            let tag = tags[i]
-            let startIndex = processed.index(processed.startIndex, offsetBy: tag.range.location)
-            let endIndex = processed.index(startIndex, offsetBy: tag.range.length)
-            processed.replaceSubrange(startIndex..<endIndex, with: "⟦TAG\(i)⟧")
+        for (i, tag) in tags.enumerated().reversed() {
+            guard let range = Range(tag.range, in: processed) else { continue }
+            processed.replaceSubrange(range, with: "⟦TAG\(i)⟧")
         }
 
         // Convert block-level HTML to newlines

@@ -18,7 +18,7 @@ struct StoryRowView: View {
             // Left: content
             VStack(alignment: .leading, spacing: 6) {
                 Text(story.title)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.headline.weight(.semibold))
                     .foregroundStyle(isRead ? .secondary : .primary)
                     .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
@@ -52,7 +52,7 @@ struct StoryRowView: View {
                         Text(story.timeAgo)
                     }
                 }
-                .font(.system(size: 12))
+                .font(.caption)
                 .foregroundStyle(Color(uiColor: .secondaryLabel))
             }
 

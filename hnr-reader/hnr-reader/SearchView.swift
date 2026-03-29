@@ -6,11 +6,13 @@
 import SwiftUI
 
 struct SearchView: View {
+    let focusSearchRequestID: Int
     @State private var query = ""
     @State private var results: [HNStory] = []
     @State private var isSearching = false
     @State private var selectedStory: HNStory?
     @State private var showSettings = false
+    @State private var isSearchPresented = false
 
     var body: some View {
         NavigationStack {
@@ -61,7 +63,7 @@ struct SearchView: View {
             .navigationDestination(item: $selectedStory) { story in
                 StoryDetailView(story: story)
             }
-            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always))
+            .searchable(text: $query, isPresented: $isSearchPresented, placement: .navigationBarDrawer(displayMode: .always))
             .task(id: query) {
                 guard !query.isEmpty else {
                     results = []
@@ -81,6 +83,9 @@ struct SearchView: View {
                     }
                 }
                 isSearching = false
+            }
+            .onChange(of: focusSearchRequestID) { _, _ in
+                isSearchPresented = true
             }
         }
     }

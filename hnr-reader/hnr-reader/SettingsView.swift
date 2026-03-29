@@ -9,8 +9,17 @@ struct SettingsView: View {
     @AppStorage("useInAppBrowser") private var useInAppBrowser = true
     @AppStorage("useReaderMode") private var useReaderMode = true
     @AppStorage("appColorScheme") private var appColorScheme = "system"
+    @AppStorage("defaultFeed") private var defaultFeedStorage = StoryFeed.top.storageValue
     @AppStorage("readerModeExceptionDomains") private var readerModeExceptionDomainsRaw = ""
     @State private var showClearCacheConfirmation = false
+
+    private var isIPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
+    private var defaultFeed: Binding<StoryFeed> {
+        Binding(
+            get: { StoryFeed.fromStorageValue(defaultFeedStorage) },
+            set: { defaultFeedStorage = $0.storageValue }
+        )
+    }
 
     var body: some View {
         NavigationStack {
@@ -22,27 +31,40 @@ struct SettingsView: View {
                         Text("Dark").tag("dark")
                     }
                     .pickerStyle(.menu)
+                    .tint(.secondary)
+                }
+
+                Section("Startup") {
+                    Picker("Default Tab", selection: defaultFeed) {
+                        ForEach(StoryFeed.allCases, id: \.self) { feed in
+                            Text(feed.shortTitle).tag(feed)
+                        }
+                    }
                 }
 
                 Section {
                     Toggle("In-App Browser", isOn: $useInAppBrowser)
-                    Toggle("Reader Mode by Default", isOn: $useReaderMode)
-                        .disabled(!useInAppBrowser)
-                    NavigationLink {
-                        ReaderModeExceptionsView()
-                    } label: {
-                        HStack {
-                            Text("Reader Mode Exceptions")
-                            Spacer()
-                            Text("\(readerModeExceptionDomains.count)")
-                                .foregroundStyle(.secondary)
+                    if !isIPad {
+                        Toggle("Reader Mode by Default", isOn: $useReaderMode)
+                            .disabled(!useInAppBrowser)
+                        NavigationLink {
+                            ReaderModeExceptionsView()
+                        } label: {
+                            HStack {
+                                Text("Reader Mode Exceptions")
+                                Spacer()
+                                Text("\(readerModeExceptionDomains.count)")
+                                    .foregroundStyle(.secondary)
+                            }
                         }
+                        .disabled(!useInAppBrowser)
                     }
-                    .disabled(!useInAppBrowser)
                 } header: {
                     Text("Browser")
                 } footer: {
-                    if !useInAppBrowser {
+                    if isIPad {
+                        Text("Reader mode is not available on iPad.")
+                    } else if !useInAppBrowser {
                         Text("Reader mode is only available with the in-app browser.")
                     }
                 }

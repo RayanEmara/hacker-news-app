@@ -8,6 +8,7 @@ import SwiftUI
 struct StoriesView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
+    let focusSearchRequestID: Int
     @State var feed: StoryFeed
     @State private var store: StoryStore
     @State private var readHistory = ReadHistory.shared
@@ -18,8 +19,13 @@ struct StoriesView: View {
     @State private var searchResults: [HNStory] = []
     @State private var isSearching = false
     @State private var showSearch = false
+    @State private var browserURL: URL?
+    @State private var isSearchPresented = false
 
-    init(feed: StoryFeed) {
+    @AppStorage("useInAppBrowser") private var useInAppBrowser = true
+
+    init(feed: StoryFeed, focusSearchRequestID: Int = 0) {
+        self.focusSearchRequestID = focusSearchRequestID
         self._feed = State(initialValue: feed)
         self._store = State(initialValue: StoryStore(feed: feed))
     }
@@ -36,6 +42,7 @@ struct StoriesView: View {
             SettingsView()
         }
         .onChange(of: selectedStory) { _, story in
+            browserURL = nil
             if let story {
                 readHistory.markRead(story.id)
             }
@@ -81,7 +88,7 @@ struct StoriesView: View {
             storyList(selectionMode: true)
                 .navigationTitle(feed.rawValue)
                 .navigationBarTitleDisplayMode(.large)
-                .searchable(text: $searchQuery, placement: .sidebar, prompt: "Search")
+                .searchable(text: $searchQuery, isPresented: $isSearchPresented, placement: .sidebar, prompt: "Search")
                 .task(id: searchQuery) {
                     guard !searchQuery.isEmpty else {
                         searchResults = []
@@ -103,6 +110,9 @@ struct StoriesView: View {
                     }
                     isSearching = false
                 }
+                .onChange(of: focusSearchRequestID) { _, _ in
+                    isSearchPresented = true
+                }
         } detail: {
             ZStack {
                 if let selectedStory {
@@ -113,8 +123,38 @@ struct StoriesView: View {
                     ContentUnavailableView("Select a Post", systemImage: "doc.text")
                         .transition(.opacity)
                 }
+
+                if let browserURL {
+                    InlineWebView(url: browserURL)
+                        .id(browserURL)
+                        .background(Color(.systemBackground))
+                        .ignoresSafeArea(.container, edges: [.top, .bottom])
+                        .transition(.modifier(
+                            active: WebViewTransition(opacity: 0, blur: 6),
+                            identity: WebViewTransition(opacity: 1, blur: 0)
+                        ))
+                }
             }
+            .environment(\.openURL, OpenURLAction { url in
+                if useInAppBrowser {
+                    browserURL = url
+                    return .handled
+                }
+                return .systemAction
+            })
             .toolbar {
+                ToolbarItemGroup(placement: .topBarLeading) {
+                    if browserURL != nil {
+                        Button {
+                            browserURL = nil
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "chevron.left")
+                                Text("Back")
+                            }
+                        }
+                    }
+                }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Menu {
                         Picker("Feed", selection: $feed) {
@@ -123,8 +163,13 @@ struct StoriesView: View {
                             }
                         }
                     } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .font(.system(size: 18))
+                        HStack(spacing: 4) {
+                            Text(feed.shortTitle)
+                                .padding(.leading, 4)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .font(.system(size: 15, weight: .semibold))
                     }
                     Button {
                         showSettings = true
@@ -136,6 +181,7 @@ struct StoriesView: View {
             }
             .toolbarRole(.browser)
             .animation(.easeInOut(duration: 0.18), value: selectedStory?.id)
+            .animation(.spring(duration: 0.3, bounce: 0.0), value: browserURL)
         }
         .navigationSplitViewStyle(.balanced)
     }
@@ -211,6 +257,19 @@ struct StoriesView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Web View Transition
+
+struct WebViewTransition: ViewModifier {
+    let opacity: Double
+    let blur: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(opacity)
+            .blur(radius: blur)
     }
 }
 
