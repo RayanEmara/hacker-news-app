@@ -166,18 +166,15 @@ struct HNComment: Identifiable {
             }
         }
 
-        // Sort by position descending so we can replace without shifting indices
-        tags.sort { $0.range.location > $1.range.location }
+        // Sort by position ascending (document order) — replace from end to start to preserve indices
+        tags.sort { $0.range.location < $1.range.location }
 
-        // Replace tags with indexed placeholders
-        for (i, tag) in tags.enumerated() {
+        for i in stride(from: tags.count - 1, through: 0, by: -1) {
+            let tag = tags[i]
             let startIndex = processed.index(processed.startIndex, offsetBy: tag.range.location)
             let endIndex = processed.index(startIndex, offsetBy: tag.range.length)
             processed.replaceSubrange(startIndex..<endIndex, with: "⟦TAG\(i)⟧")
         }
-
-        // Reverse so tags are in document order for building the attributed string
-        tags.reverse()
 
         // Convert block-level HTML to newlines
         processed = processed.replacingOccurrences(of: "<p>", with: "\n\n")

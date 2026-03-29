@@ -10,6 +10,7 @@ struct SearchView: View {
     @State private var results: [HNStory] = []
     @State private var isSearching = false
     @State private var selectedStory: HNStory?
+    @State private var showSettings = false
 
     var body: some View {
         NavigationStack {
@@ -44,6 +45,19 @@ struct SearchView: View {
             .listStyle(.plain)
             .navigationTitle("Search")
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showSettings = true
+                    } label: {
+                        Image(systemName: "person.circle")
+                            .font(.system(size: 18))
+                    }
+                }
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
+            }
             .navigationDestination(item: $selectedStory) { story in
                 StoryDetailView(story: story)
             }

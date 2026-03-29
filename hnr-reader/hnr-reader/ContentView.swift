@@ -8,6 +8,16 @@
 import SwiftUI
 
 struct ContentView: View {
+    @AppStorage("appColorScheme") private var appColorScheme = "system"
+
+    private var preferredColorScheme: ColorScheme? {
+        switch appColorScheme {
+        case "light": return .light
+        case "dark": return .dark
+        default: return nil
+        }
+    }
+
     var body: some View {
         TabView {
             Tab("Top", systemImage: "flame.fill") {
@@ -31,6 +41,7 @@ struct ContentView: View {
             }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
+        .preferredColorScheme(preferredColorScheme)
     }
 }
 

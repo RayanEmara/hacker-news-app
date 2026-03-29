@@ -9,6 +9,7 @@ struct StoriesView: View {
     let feed: StoryFeed
     @State private var store: StoryStore
     @State private var selectedStory: HNStory?
+    @State private var showSettings = false
 
     init(feed: StoryFeed) {
         self.feed = feed
@@ -65,6 +66,19 @@ struct StoriesView: View {
             }
             .navigationTitle(feed.rawValue)
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showSettings = true
+                    } label: {
+                        Image(systemName: "person.circle")
+                            .font(.system(size: 18))
+                    }
+                }
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
+            }
         }
         .task {
             if store.stories.isEmpty {

@@ -8,10 +8,11 @@ import SwiftUI
 
 struct SafariView: UIViewControllerRepresentable {
     let url: URL
+    var readerMode: Bool = true
 
     func makeUIViewController(context: Context) -> SFSafariViewController {
         let config = SFSafariViewController.Configuration()
-        config.entersReaderIfAvailable = true
+        config.entersReaderIfAvailable = readerMode
         config.barCollapsingEnabled = false
         let vc = SFSafariViewController(url: url, configuration: config)
         vc.preferredControlTintColor = .orange
@@ -24,16 +25,21 @@ struct SafariView: UIViewControllerRepresentable {
 // MARK: - View modifier that intercepts all link opens
 
 struct InAppBrowserModifier: ViewModifier {
+    @AppStorage("useInAppBrowser") private var useInAppBrowser = true
+    @AppStorage("useReaderMode") private var useReaderMode = true
     @State private var safariURL: URL?
 
     func body(content: Content) -> some View {
         content
             .environment(\.openURL, OpenURLAction { url in
-                safariURL = url
-                return .handled
+                if useInAppBrowser {
+                    safariURL = url
+                    return .handled
+                }
+                return .systemAction
             })
             .fullScreenCover(item: $safariURL) { url in
-                SafariView(url: url)
+                SafariView(url: url, readerMode: useReaderMode)
                     .ignoresSafeArea()
             }
     }

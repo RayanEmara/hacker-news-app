@@ -198,7 +198,7 @@ struct StoryDetailView: View {
     private func actionButton(_ icon: String) -> some View {
         Image(systemName: icon)
             .font(.system(size: 19))
-            .foregroundStyle(Color(uiColor: .label))
+            .foregroundStyle(Color(uiColor: .tertiaryLabel))
             .frame(width: 50, height: 44)
     }
 }

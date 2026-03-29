@@ -13,9 +13,9 @@ struct hnr_readerApp: App {
     init() {
         let serifDescriptor = UIFontDescriptor
             .preferredFontDescriptor(withTextStyle: .largeTitle)
-            .withDesign(.serif)!
+            
             .withSymbolicTraits(.traitBold)!
-        let serifFont = UIFont(descriptor: serifDescriptor, size: 0)
+        let serifFont = UIFont(descriptor: serifDescriptor, size: 34)
 
         UINavigationBar.appearance().largeTitleTextAttributes = [
             .font: serifFont
