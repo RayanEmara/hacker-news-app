@@ -8,15 +8,18 @@ import SwiftUI
 struct StoriesView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
-    let feed: StoryFeed
+    @State var feed: StoryFeed
     @State private var store: StoryStore
     @State private var readHistory = ReadHistory.shared
     @State private var selectedStory: HNStory?
     @State private var showSettings = false
     @State private var splitViewVisibility: NavigationSplitViewVisibility = .all
+    @State private var searchQuery = ""
+    @State private var searchResults: [HNStory] = []
+    @State private var isSearching = false
 
     init(feed: StoryFeed) {
-        self.feed = feed
+        self._feed = State(initialValue: feed)
         self._store = State(initialValue: StoryStore(feed: feed))
     }
 
@@ -36,6 +39,11 @@ struct StoriesView: View {
                 readHistory.markRead(story.id)
             }
         }
+        .onChange(of: feed) { _, newFeed in
+            selectedStory = nil
+            store = StoryStore(feed: newFeed)
+            Task { await store.loadStories() }
+        }
         .task {
             if store.stories.isEmpty {
                 await store.loadStories()
@@ -45,7 +53,7 @@ struct StoriesView: View {
 
     private var stackedLayout: some View {
         NavigationStack {
-            storyList(selectionMode: false, topInset: 0)
+            storyList(selectionMode: false)
                 .navigationDestination(item: $selectedStory) { story in
                     StoryDetailView(story: story)
                 }
@@ -56,28 +64,67 @@ struct StoriesView: View {
     }
 
     private var splitViewLayout: some View {
-        GeometryReader { proxy in
-            NavigationSplitView(columnVisibility: $splitViewVisibility) {
-                storyList(selectionMode: true, topInset: proxy.safeAreaInsets.top)
-                    .toolbar(.hidden, for: .navigationBar)
-            } detail: {
-                ZStack {
-                    if let selectedStory {
-                        StoryDetailView(story: selectedStory)
-                            .id(selectedStory.id)
-                            .transition(.opacity)
-                    } else {
-                        ContentUnavailableView("Select a Post", systemImage: "doc.text")
-                            .transition(.opacity)
+        NavigationSplitView(columnVisibility: $splitViewVisibility) {
+            storyList(selectionMode: true)
+                .navigationTitle(feed.rawValue)
+                .navigationBarTitleDisplayMode(.large)
+                .searchable(text: $searchQuery, placement: .sidebar, prompt: "Search")
+                .task(id: searchQuery) {
+                    guard !searchQuery.isEmpty else {
+                        searchResults = []
+                        isSearching = false
+                        return
+                    }
+                    isSearching = true
+                    try? await Task.sleep(for: .milliseconds(300))
+                    guard !Task.isCancelled else { return }
+                    do {
+                        let result = try await HNService.searchStories(query: searchQuery)
+                        if !Task.isCancelled {
+                            searchResults = result.stories
+                        }
+                    } catch {
+                        if !Task.isCancelled {
+                            searchResults = []
+                        }
+                    }
+                    isSearching = false
+                }
+        } detail: {
+            ZStack {
+                if let selectedStory {
+                    StoryDetailView(story: selectedStory)
+                        .id(selectedStory.id)
+                        .transition(.opacity)
+                } else {
+                    ContentUnavailableView("Select a Post", systemImage: "doc.text")
+                        .transition(.opacity)
+                }
+            }
+            .toolbar {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Menu {
+                        Picker("Feed", selection: $feed) {
+                            ForEach(StoryFeed.allCases, id: \.self) { f in
+                                Label(f.rawValue, systemImage: f.iconName).tag(f)
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .font(.system(size: 18))
+                    }
+                    Button {
+                        showSettings = true
+                    } label: {
+                        Image(systemName: "person.circle")
+                            .font(.system(size: 18))
                     }
                 }
-                .toolbar { settingsToolbar }
-                .toolbarRole(.browser)
-                .animation(.easeInOut(duration: 0.18), value: selectedStory?.id)
             }
-            .navigationSplitViewStyle(.balanced)
-            .ignoresSafeArea(edges: .top)
+            .toolbarRole(.browser)
+            .animation(.easeInOut(duration: 0.18), value: selectedStory?.id)
         }
+        .navigationSplitViewStyle(.balanced)
     }
 
     @ToolbarContentBuilder
@@ -93,7 +140,7 @@ struct StoriesView: View {
     }
 
     @ViewBuilder
-    private func storyList(selectionMode: Bool, topInset: CGFloat) -> some View {
+    private func storyList(selectionMode: Bool) -> some View {
         Group {
             if store.isLoading && store.stories.isEmpty {
                 ProgressView()
@@ -103,48 +150,58 @@ struct StoriesView: View {
                     Task { await store.loadStories() }
                 }
             } else {
-                List(selection: selectionMode ? $selectedStory : .constant(nil)) {
-                    if selectionMode {
-                        HStack(spacing: 12) {
-                            Text(feed.rawValue)
-                                .font(.system(size: 26, weight: .bold))
-                            Spacer()
-                            Button {
-                                splitViewVisibility = splitViewVisibility == .detailOnly ? .all : .detailOnly
-                            } label: {
-                                Image(systemName: splitViewVisibility == .detailOnly ? "sidebar.leading" : "rectangle.leadinghalf.inset.filled")
-                                    .font(.system(size: 19, weight: .medium))
-                                    .foregroundStyle(Color(uiColor: .label))
+                List {
+                    if selectionMode && !searchQuery.isEmpty {
+                        if isSearching {
+                            HStack {
+                                Spacer()
+                                ProgressView()
+                                Spacer()
                             }
-                            .buttonStyle(.plain)
-                        }
-                        .listRowInsets(EdgeInsets(top: topInset + 8, leading: 16, bottom: 8, trailing: 16))
-                        .listRowSeparator(.hidden)
-                    }
-                    ForEach(store.stories) { story in
-                        StoryRowView(story: story, isRead: readHistory.isRead(story.id))
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                selectedStory = story
-                            }
-                            .overlay(alignment: .trailing) {
-                                if let urlString = story.url, let url = URL(string: urlString) {
-                                    Link(destination: url) {
-                                        Color.clear
-                                            .frame(width: 70, height: 70)
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                        } else if searchResults.isEmpty {
+                            NoResultsView(query: searchQuery)
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                        } else {
+                            ForEach(searchResults) { story in
+                                StoryRowView(story: story)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture {
+                                        selectedStory = story
                                     }
-                                    .padding(.trailing, 16)
-                                    .padding(.top, 13)
-                                }
+                                    .listRowBackground(
+                                        selectedStory == story
+                                            ? Color(.systemGray6)
+                                            : Color.clear
+                                    )
+                                    .listRowInsets(EdgeInsets())
+                                    .listRowSeparatorTint(Color(uiColor: .separator))
+                                    .listRowSeparator(.hidden, edges: .top)
                             }
-                            .listRowInsets(EdgeInsets())
-                            .listRowSeparatorTint(Color(uiColor: .separator))
-                            .listRowSeparator(.hidden, edges: .top)
-                            .onAppear {
-                                if story.id == store.stories.last?.id {
-                                    Task { await store.loadMore() }
+                        }
+                    } else {
+                        ForEach(store.stories) { story in
+                            StoryRowView(story: story, isRead: readHistory.isRead(story.id))
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    selectedStory = story
                                 }
-                            }
+                                .listRowBackground(
+                                    selectionMode && selectedStory == story
+                                        ? Color(.systemGray6)
+                                        : Color.clear
+                                )
+                                .listRowInsets(EdgeInsets())
+                                .listRowSeparatorTint(Color(uiColor: .separator))
+                                .listRowSeparator(.hidden, edges: .top)
+                                .onAppear {
+                                    if story.id == store.stories.last?.id {
+                                        Task { await store.loadMore() }
+                                    }
+                                }
+                        }
                     }
                 }
                 .listStyle(.plain)

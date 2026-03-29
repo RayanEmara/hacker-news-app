@@ -8,6 +8,7 @@ import SwiftUI
 struct StoryDetailView: View {
     let story: HNStory
 
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var previewImage: UIImage?
     @State private var comments: [HNComment] = []
     @State private var isLoadingComments = true
@@ -51,17 +52,23 @@ struct StoryDetailView: View {
                                 .resizable()
                                 .scaledToFill()
                         }
+                        .overlay {
+                            HStack(spacing: 0) {
+                                if horizontalSizeClass == .regular {
+                                    LinearGradient(
+                                        colors: [Color(.systemBackground), .clear],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                    .frame(width: 300)
+                                }
+                                Spacer()
+                            }
+                        }
                         .overlay(alignment: .bottom) {
                             ZStack(alignment: .bottom) {
                                 LinearGradient(
-                                    stops: [
-                                        .init(color: Color(.systemBackground).opacity(0),    location: 0),
-                                        .init(color: Color(.systemBackground).opacity(0.35), location: 0.3),
-                                        .init(color: Color(.systemBackground).opacity(0.45), location: 0.6),
-                                        .init(color: Color(.systemBackground).opacity(0.65), location: 0.7),
-                                        .init(color: Color(.systemBackground).opacity(0.92), location: 0.9),
-                                        .init(color: Color(.systemBackground),               location: 0.96)
-                                    ],
+                                    colors: [.clear, Color(.systemBackground)],
                                     startPoint: .top,
                                     endPoint: .bottom
                                 )

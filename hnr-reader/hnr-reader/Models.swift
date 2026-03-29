@@ -6,10 +6,19 @@
 import Foundation
 
 enum StoryFeed: String, CaseIterable {
-    case top = "Top stories"
-    case new = "New stories"
-    case ask = "Ask Hacker News"
-    case show = "Show Hacker News"
+    case top = "Top"
+    case new = "New"
+    case ask = "Ask"
+    case show = "Show"
+
+    var iconName: String {
+        switch self {
+        case .top: "flame.fill"
+        case .new: "sparkles"
+        case .ask: "bubble.left.fill"
+        case .show: "eye.fill"
+        }
+    }
 }
 
 struct HNStory: Identifiable, Hashable {

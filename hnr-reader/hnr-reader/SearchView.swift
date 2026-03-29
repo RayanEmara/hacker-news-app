@@ -95,7 +95,7 @@ struct SearchEmptyState: View {
                 .font(.system(size: 34))
                 .foregroundStyle(Color(uiColor: .tertiaryLabel))
 
-            Text("Search Hacker News")
+            Text("Search")
                 .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(Color(uiColor: .secondaryLabel))
         }

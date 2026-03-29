@@ -9,6 +9,7 @@ import SwiftUI
 
 struct ContentView: View {
     @AppStorage("appColorScheme") private var appColorScheme = "system"
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     private var preferredColorScheme: ColorScheme? {
         switch appColorScheme {
@@ -19,28 +20,34 @@ struct ContentView: View {
     }
 
     var body: some View {
-        TabView {
-            Tab("Top", systemImage: "flame.fill") {
+        Group {
+            if horizontalSizeClass == .regular {
                 StoriesView(feed: .top)
-            }
+            } else {
+                TabView {
+                    Tab("Top", systemImage: "flame.fill") {
+                        StoriesView(feed: .top)
+                    }
 
-            Tab("New", systemImage: "sparkles") {
-                StoriesView(feed: .new)
-            }
+                    Tab("New", systemImage: "sparkles") {
+                        StoriesView(feed: .new)
+                    }
 
-            Tab("Ask", systemImage: "bubble.left.fill") {
-                StoriesView(feed: .ask)
-            }
+                    Tab("Ask", systemImage: "bubble.left.fill") {
+                        StoriesView(feed: .ask)
+                    }
 
-            Tab("Show", systemImage: "eye.fill") {
-                StoriesView(feed: .show)
-            }
+                    Tab("Show", systemImage: "eye.fill") {
+                        StoriesView(feed: .show)
+                    }
 
-            Tab(role: .search) {
-                SearchView()
+                    Tab(role: .search) {
+                        SearchView()
+                    }
+                }
+                .tabBarMinimizeBehavior(.onScrollDown)
             }
         }
-        .tabBarMinimizeBehavior(.onScrollDown)
         .preferredColorScheme(preferredColorScheme)
     }
 }
