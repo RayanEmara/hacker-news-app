@@ -6,10 +6,10 @@
 import Foundation
 
 enum StoryFeed: String, CaseIterable {
-    case top = "Top"
-    case new = "New"
-    case ask = "Ask"
-    case show = "Show"
+    case top = "Top posts"
+    case new = "New posts"
+    case ask = "Ask posts"
+    case show = "Show posts"
 
     var iconName: String {
         switch self {

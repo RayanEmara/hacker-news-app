@@ -173,7 +173,7 @@ struct StoriesView: View {
                                     }
                                     .listRowBackground(
                                         selectedStory == story
-                                            ? Color(.systemGray6)
+                                            ? Color.primary.opacity(0.1)
                                             : Color.clear
                                     )
                                     .listRowInsets(EdgeInsets())
@@ -190,7 +190,7 @@ struct StoriesView: View {
                                 }
                                 .listRowBackground(
                                     selectionMode && selectedStory == story
-                                        ? Color(.systemGray6)
+                                        ? Color.primary.opacity(0.1)
                                         : Color.clear
                                 )
                                 .listRowInsets(EdgeInsets())
