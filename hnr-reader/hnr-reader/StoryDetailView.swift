@@ -95,10 +95,7 @@ struct StoryDetailView: View {
                     }
 
                     if let bodyText = story.bodyText, !bodyText.isEmpty {
-                        Text(HNComment.parseHTML(bodyText))
-                            .font(.system(size: 15))
-                            .foregroundStyle(Color(uiColor: .label))
-                            .tint(Color(red: 0.4, green: 0.6, blue: 1.0))
+                        LinkedText(HNComment.parseHTML(bodyText))
                     }
 
                     HStack(spacing: 4) {
@@ -289,10 +286,7 @@ struct CommentRowView: View {
 
             // Body — links are tappable, not intercepted by collapse gesture
             if !isCollapsed {
-                Text(comment.body)
-                    .font(.system(size: 15))
-                    .foregroundStyle(Color(uiColor: .label))
-                    .tint(Color(red: 0.4, green: 0.6, blue: 1.0))
+                LinkedText(comment.body)
             }
         }
         .padding(.leading, leadingPad)
@@ -345,6 +339,69 @@ func pastelCommentColor(for author: String) -> Color {
     ]
     let hash = author.unicodeScalars.reduce(0) { ($0 &* 31) &+ Int($1.value) }
     return palette[abs(hash) % palette.count]
+}
+
+// MARK: - Linked Text (native link previews on long press)
+
+struct LinkedText: UIViewRepresentable {
+    let attributedString: AttributedString
+    let font: UIFont
+    let textColor: UIColor
+    let linkColor: UIColor
+    @Environment(\.openURL) private var openURL
+
+    init(_ attributedString: AttributedString,
+         font: UIFont = .systemFont(ofSize: 15),
+         textColor: UIColor = .label,
+         linkColor: UIColor = UIColor(red: 0.4, green: 0.6, blue: 1.0, alpha: 1.0)) {
+        self.attributedString = attributedString
+        self.font = font
+        self.textColor = textColor
+        self.linkColor = linkColor
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(openURL: openURL)
+    }
+
+    func makeUIView(context: Context) -> UITextView {
+        let textView = UITextView()
+        textView.delegate = context.coordinator
+        textView.isEditable = false
+        textView.isScrollEnabled = false
+        textView.backgroundColor = .clear
+        textView.textContainerInset = .zero
+        textView.textContainer.lineFragmentPadding = 0
+        textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        textView.linkTextAttributes = [.foregroundColor: linkColor]
+        return textView
+    }
+
+    func updateUIView(_ textView: UITextView, context: Context) {
+        context.coordinator.openURL = openURL
+        let nsAttr = NSMutableAttributedString(attributedString)
+        nsAttr.addAttributes(
+            [.font: font, .foregroundColor: textColor],
+            range: NSRange(location: 0, length: nsAttr.length)
+        )
+        textView.attributedText = nsAttr
+    }
+
+    class Coordinator: NSObject, UITextViewDelegate {
+        var openURL: OpenURLAction
+
+        init(openURL: OpenURLAction) {
+            self.openURL = openURL
+        }
+
+        func textView(_ textView: UITextView, shouldInteractWith url: URL, in characterRange: NSRange, interaction: UITextItemInteraction) -> Bool {
+            if interaction == .invokeDefaultAction {
+                openURL(url)
+                return false
+            }
+            return true // allow long-press preview
+        }
+    }
 }
 
 private extension Color {

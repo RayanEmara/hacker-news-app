@@ -17,6 +17,7 @@ struct StoriesView: View {
     @State private var searchQuery = ""
     @State private var searchResults: [HNStory] = []
     @State private var isSearching = false
+    @State private var showSearch = false
 
     init(feed: StoryFeed) {
         self._feed = State(initialValue: feed)
@@ -47,6 +48,18 @@ struct StoriesView: View {
         .task {
             if store.stories.isEmpty {
                 await store.loadStories()
+            }
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var settingsToolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                showSettings = true
+            } label: {
+                Image(systemName: "person.circle")
+                    .font(.system(size: 18))
             }
         }
     }
@@ -125,18 +138,6 @@ struct StoriesView: View {
             .animation(.easeInOut(duration: 0.18), value: selectedStory?.id)
         }
         .navigationSplitViewStyle(.balanced)
-    }
-
-    @ToolbarContentBuilder
-    private var settingsToolbar: some ToolbarContent {
-        ToolbarItem(placement: .topBarTrailing) {
-            Button {
-                showSettings = true
-            } label: {
-                Image(systemName: "person.circle")
-                    .font(.system(size: 18))
-            }
-        }
     }
 
     @ViewBuilder
